@@ -7,6 +7,10 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+# اضافه کردن متغیر موقت برای مرحله prisma generate در بیلد داکر
+ENV DATABASE_URL="mysql://dummy:dummy@localhost:3306/dummy"
+
 RUN npm run build
 
 # 2. Production Stage
