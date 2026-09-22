@@ -14,10 +14,14 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @Get('test-db')
+    @Get('test-db')
   async testDb() {
-    // یک کوئری خام برای سنجش سلامت اتصال به MySQL
-    const result = await this.prisma.$queryRaw`SELECT 1 as is_connected`;
-    return { status: 'ok', result };
+    const userCount = await this.prisma.user.count();
+    return {
+      status: 'ok',
+      message: 'Database connected successfully!',
+      userCount: Number(userCount),
+    };
   }
+
 }
