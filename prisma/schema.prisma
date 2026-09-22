@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. Enums
+// ==========================================
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PENDING
+}
+
+enum BlockType {
+  LINK           // لینک معمولی یا دکمه
+  SOCIALS        // آیکون‌های شبکه‌های اجتماعی
+  TEXT_HEADER    // تیتر و متن توضیحی
+  YOUTUBE_EMBED  // امبد ویدیو
+  APARAT_EMBED   // امبد آپارات
+  IMAGE_BANNER   // تصویر یا بنر
+}
+
+// ==========================================
+// 2. User & Authentication
+// ==========================================
+
+model User {
+  id            String         @id @default(uuid())
+  phoneNumber   String?        @unique
+  email         String?        @unique
+  fullName      String?
+  avatarUrl     String?
+  role          Role           @default(USER)
+  googleId      String?        @unique
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  otps          Otp[]
+  businesses    Business[]
+  subscriptions Subscription[]
+
+  @@index([phoneNumber])
+  @@index([email])
+}
+
+model Otp {
+  id          String   @id @default(uuid())
+  phone       String
+  code        String
+  expiresAt   DateTime
+  isUsed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone, code])
+}
+
+// ==========================================
+// 3. Plans & Subscriptions
+// ==========================================
+
+model Plan {
+  id              String         @id @default(uuid())
+  name            String         // مثلا: رایگان، برنزی، نقره‌ای، طلایی
+  price           Int            @default(0) // قیمت به تومان
+  durationDays    Int            @default(30) // مدت زمان پلن
+  maxBusinesses   Int            @default(1)  // حداکثر تعداد بیزینس مجاز
+  maxPagesPerBiz  Int            @default(1)  // حداکثر صفحات به ازای هر بیزینس
+  maxLinksPerPage Int            @default(10) // سقف لینک در هر صفحه
+  hasAnalytics    Boolean        @default(false)
+  hasCustomDomain Boolean        @default(false)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  subscriptions   Subscription[]
+}
+
+model Subscription {
+  id          String             @id @default(uuid())
+  userId      String
+  planId      String
+  startDate   DateTime           @default(now())
+  endDate     DateTime
+  status      SubscriptionStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan        Plan               @relation(fields: [planId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ==========================================
+// 4. Business & BioPages
+// ==========================================
+
+model Business {
+  id          String    @id @default(uuid())
+  userId      String
+  name        String    // نام برند یا کسب‌وکار
+  description String?   @db.Text
+  logoUrl     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bioPages    BioPage[]
+
+  @@index([userId])
+}
+
+model BioPage {
+  id              String      @id @default(uuid())
+  businessId      String
+  slug            String      @unique // آدرس صفحه مثلا: myapp.ir/raha
+  title           String      // تیتر اصلی داخل صفحه
+  bio             String?     @db.Text // بیوگرافی کوتاه زیر عکس
+  avatarUrl       String?
+  themeConfig     Json?       // تنظیمات استایل: رنگ پس‌زمینه، شکل دکمه‌ها، فونت
+  customDomain    String?     @unique
+  isPublished     Boolean     @default(true)
+
+  // سئو و متاتگ‌ها
+  metaTitle       String?
+  metaDescription String?     @db.Text
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  business        Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  blocks          Block[]
+  pageViews       PageView[]
+
+  @@index([slug])
+  @@index([businessId])
+}
+
+// ==========================================
+// 5. Blocks (Elements on BioPage)
+// ==========================================
+
+model Block {
+  id          String      @id @default(uuid())
+  bioPageId   String
+  type        BlockType   @default(LINK)
+  title       String?     // عنوان روی دکمه یا کارت
+  url         String?     @db.Text // مقصد لینک
+  icon        String?     // نام آیکون (مثلا lucide-react icon name)
+  order       Int         @default(0) // ترتیب نمایش از بالا به پایین
+  isActive    Boolean     @default(true)
+  extraData   Json?       // داده‌های انعطاف‌پذیر (مثلا رنگ سفارشی برای این دکمه یا آیدی ویدیو)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  bioPage     BioPage     @relation(fields: [bioPageId], references: [id], onDelete: Cascade)
+  linkClicks  LinkClick[]
+
+  @@index([bioPageId])
+  @@index([order])
+}
+
+// ==========================================
+// 6. Analytics
+// ==========================================
+
+model PageView {
+  id          String   @id @default(uuid())
+  bioPageId   String
+  ipAddress   String?
+  userAgent   String?  @db.Text
+  deviceType  String?  // Mobile, Desktop, Tablet
+  referrer    String?  @db.Text
+  country     String?
+  createdAt   DateTime @default(now())
+
+  bioPage     BioPage  @relation(fields: [bioPageId], references: [id], onDelete: Cascade)
+
+  @@index([bioPageId])
+  @@index([createdAt])
+}
+
+model LinkClick {
+  id          String   @id @default(uuid())
+  blockId     String
+  ipAddress   String?
+  userAgent   String?  @db.Text
+  referrer    String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  block       Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@index([blockId])
+  @@index([createdAt])
+}
